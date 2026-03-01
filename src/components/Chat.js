@@ -19,6 +19,42 @@ import './Chat.css';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+// Resize/compress image to reduce token count (Gemini has ~1M token limit)
+const MAX_IMAGE_DIM = 512;
+const JPEG_QUALITY = 0.82;
+
+async function resizeImageForApi(base64, mimeType) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      let w = img.width;
+      let h = img.height;
+      if (w > MAX_IMAGE_DIM || h > MAX_IMAGE_DIM) {
+        if (w > h) {
+          h = Math.round((h * MAX_IMAGE_DIM) / w);
+          w = MAX_IMAGE_DIM;
+        } else {
+          w = Math.round((w * MAX_IMAGE_DIM) / h);
+          h = MAX_IMAGE_DIM;
+        }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+      try {
+        const dataUrl = canvas.toDataURL('image/jpeg', JPEG_QUALITY);
+        resolve({ data: dataUrl.split(',')[1], mimeType: 'image/jpeg' });
+      } catch (e) {
+        reject(e);
+      }
+    };
+    img.onerror = () => reject(new Error('Failed to load image'));
+    img.src = `data:${mimeType};base64,${base64}`;
+  });
+}
+
 const chatTitle = () => {
   const d = new Date();
   return `Chat · ${d.toLocaleDateString([], { month: 'short', day: 'numeric' })} ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
@@ -459,7 +495,16 @@ ${sessionSummary}${slimCsvBlock}
     // Store display text only — base64 is never persisted
     await saveMessage(sessionId, 'user', userContent, capturedImages.length ? capturedImages : null);
 
-    const imageParts = capturedImages.map((img) => ({ mimeType: img.mimeType, data: img.data }));
+    // Resize images before sending to Gemini to avoid token limit (1M max)
+    const imageParts = await Promise.all(
+      capturedImages.map(async (img) => {
+        try {
+          return await resizeImageForApi(img.data, img.mimeType || 'image/png');
+        } catch {
+          return { mimeType: img.mimeType, data: img.data };
+        }
+      })
+    );
 
     // History: plain display text only — session summary handles CSV context on every message
     const history = messages
@@ -486,9 +531,11 @@ ${sessionSummary}${slimCsvBlock}
           history,
           promptForGemini,
           jsonContext,
+          imageParts,
           (toolName, args) => executeYoutubeTool(toolName, args, {
             jsonData: sessionJsonData,
-            anchorImageBase64: capturedImages[0]?.data,
+            anchorImageBase64: imageParts[0]?.data,
+            anchorImageMimeType: imageParts[0]?.mimeType || 'image/jpeg',
           }),
           userContext
         );

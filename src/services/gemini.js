@@ -202,16 +202,19 @@ export const chatWithCsvTools = async (history, newMessage, csvHeaders, executeF
 
 // ── Function-calling chat for YouTube/JSON tools ──────────────────────────────
 
-export const chatWithJsonTools = async (history, newMessage, jsonContext, executeFn, userContext = null) => {
+export const chatWithJsonTools = async (history, newMessage, jsonContext, imageParts = [], executeFn, userContext = null) => {
   const systemInstruction = await loadSystemPrompt(userContext);
   const model = genAI.getGenerativeModel({
     model: MODEL,
     tools: [{ functionDeclarations: YOUTUBE_TOOL_DECLARATIONS }],
   });
 
-  const baseHistory = history.map((m) => ({
+  // Limit history to avoid token overflow (1M limit) when images are included
+  const maxHistory = 10;
+  const trimmedHistory = history.length > maxHistory ? history.slice(-maxHistory) : history;
+  const baseHistory = trimmedHistory.map((m) => ({
     role: m.role === 'user' ? 'user' : 'model',
-    parts: [{ text: m.content || '' }],
+    parts: [{ text: (m.content || '').slice(0, 6000) }],
   }));
 
   const chatHistory = systemInstruction
@@ -231,7 +234,16 @@ export const chatWithJsonTools = async (history, newMessage, jsonContext, execut
     ? `[YouTube channel JSON loaded: ${jsonContext.videoCount || 0} videos. Fields: ${jsonContext.fields || 'title, view_count, like_count, comment_count, duration, release_date, video_url'}]\n\n${newMessage}`
     : newMessage;
 
-  let response = (await chat.sendMessage(msgWithContext)).response;
+  // Include image parts so Gemini sees the anchor/reference image when user asks to generate from it
+  const messageParts =
+    imageParts?.length > 0
+      ? [
+          { text: msgWithContext },
+          ...imageParts.map((p) => ({ inlineData: { mimeType: p.mimeType || 'image/png', data: p.data } })),
+        ]
+      : msgWithContext;
+
+  let response = (await chat.sendMessage(messageParts)).response;
 
   const charts = [];
   const toolCalls = [];

@@ -309,26 +309,68 @@ app.post('/api/generate-image', async (req, res) => {
     return res.status(400).json({ error: 'Gemini API key required for image generation' });
   }
   try {
-    const { prompt } = req.body;
+    const { prompt, anchorImageBase64, anchorImageMimeType } = req.body;
     if (!prompt || typeof prompt !== 'string') {
       return res.status(400).json({ error: 'prompt required' });
     }
-    const { GoogleGenAI } = require('@google/genai');
-    const genAI = new GoogleGenAI({ apiKey: GEMINI_KEY });
-    const response = await genAI.models.generateImages({
-      model: 'imagen-3.0-generate-001',
-      prompt,
-      config: { numberOfImages: 1 },
-    });
-    const imgBytes = response?.generatedImages?.[0]?.image?.imageBytes;
-    if (imgBytes) {
-      const base64 = Buffer.isBuffer(imgBytes) ? imgBytes.toString('base64') : imgBytes;
-      return res.json({ imageBase64: base64, prompt });
+
+    const base64Data = anchorImageBase64
+      ? String(anchorImageBase64).replace(/^data:image\/\w+;base64,/, '')
+      : null;
+    const mimeType = anchorImageMimeType || 'image/png';
+
+    const parts = [{ text: prompt }];
+    if (base64Data) {
+      parts.push({ inlineData: { mimeType, data: base64Data } });
     }
-    res.status(500).json({ error: 'No image in response' });
+
+    const payload = {
+      contents: [{ parts }],
+      generationConfig: { responseModalities: ['IMAGE'] },
+    };
+
+    // Try production model first, then preview (Nano Banana)
+    const modelIds = ['gemini-2.5-flash-image', 'gemini-2.5-flash-preview-image'];
+    let lastError = null;
+
+    for (const modelId of modelIds) {
+      try {
+        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${GEMINI_KEY}`;
+        const apiRes = await fetch(apiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+        const data = await apiRes.json();
+        if (!apiRes.ok) {
+          lastError = data?.error?.message || data?.error?.details?.[0]?.message || JSON.stringify(data?.error || data);
+          console.warn(`Image gen (${modelId}) failed:`, lastError);
+          continue;
+        }
+
+        const candidate = data?.candidates?.[0];
+        if (candidate?.finishReason === 'SAFETY' || candidate?.finishReason === 'RECITATION') {
+          return res.status(400).json({ error: 'Content was blocked by safety filters. Try a different prompt.' });
+        }
+
+        const responseParts = candidate?.content?.parts || [];
+        for (const part of responseParts) {
+          if (part.inlineData?.data) {
+            return res.json({ imageBase64: part.inlineData.data, prompt });
+          }
+        }
+        lastError = 'No image in response';
+      } catch (e) {
+        lastError = e.message;
+        console.warn(`Image gen (${modelId}) error:`, e.message);
+      }
+    }
+
+    return res.status(500).json({ error: lastError || 'Image generation failed. Check your Gemini API key at aistudio.google.com/apikey and ensure image models are enabled.' });
   } catch (err) {
     console.error('Image generation error:', err.message);
-    res.status(500).json({ error: err.message || 'Image generation failed' });
+    return res.status(500).json({ error: err.message || 'Image generation failed' });
   }
 });
 

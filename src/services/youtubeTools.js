@@ -104,7 +104,7 @@ export const YOUTUBE_TOOL_DECLARATIONS = [
 ];
 
 export async function executeYoutubeTool(toolName, args, context) {
-  const { jsonData, anchorImageBase64 } = context;
+  const { jsonData, anchorImageBase64, anchorImageMimeType } = context;
   const videos = jsonData?.videos || [];
   const rows = Array.isArray(videos) ? videos : [];
 
@@ -188,10 +188,15 @@ export async function executeYoutubeTool(toolName, args, context) {
     case 'generateImage': {
       const API = process.env.REACT_APP_API_URL || '';
       try {
+        const body = { prompt: args.prompt || 'A beautiful image' };
+        if (anchorImageBase64) {
+          body.anchorImageBase64 = anchorImageBase64;
+          if (anchorImageMimeType) body.anchorImageMimeType = anchorImageMimeType;
+        }
         const res = await fetch(`${API}/api/generate-image`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt: args.prompt || 'A beautiful image' }),
+          body: JSON.stringify(body),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Image generation failed');
@@ -201,7 +206,8 @@ export async function executeYoutubeTool(toolName, args, context) {
           prompt: data.prompt,
         };
       } catch (err) {
-        return { error: `Image generation failed: ${err.message}` };
+        const msg = err.message || 'Unknown error';
+        return { error: `Image generation failed: ${msg}. (Check server logs for details. Ensure REACT_APP_GEMINI_API_KEY in .env is from aistudio.google.com/apikey.)` };
       }
     }
 
