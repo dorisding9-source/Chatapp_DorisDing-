@@ -210,20 +210,25 @@ export const chatWithJsonTools = async (history, newMessage, jsonContext, imageP
   });
 
   // Limit history to avoid token overflow (1M limit) when images are included
-  const maxHistory = 10;
+  const maxHistory = imageParts?.length > 0 ? 2 : 10;
+  const maxCharsPerMsg = imageParts?.length > 0 ? 800 : 6000;
   const trimmedHistory = history.length > maxHistory ? history.slice(-maxHistory) : history;
   const baseHistory = trimmedHistory.map((m) => ({
     role: m.role === 'user' ? 'user' : 'model',
-    parts: [{ text: (m.content || '').slice(0, 6000) }],
+    parts: [{ text: (m.content || '').slice(0, maxCharsPerMsg) }],
   }));
 
-  const chatHistory = systemInstruction
+  // Use shorter system prompt when images present to save tokens
+  const systemText = imageParts?.length > 0
+    ? 'You are Lisa (Lalisa Manobal). Be warm and helpful. Use generateImage when the user asks to create/generate an image. Use the anchor image if provided.'
+    : systemInstruction;
+  const chatHistory = systemText
     ? [
         {
           role: 'user',
-          parts: [{ text: `Follow these instructions in every response:\n\n${systemInstruction}` }],
+          parts: [{ text: `Follow these instructions:\n\n${systemText}` }],
         },
-        { role: 'model', parts: [{ text: "Got it! I'll follow those instructions." }] },
+        { role: 'model', parts: [{ text: "Got it!" }] },
         ...baseHistory,
       ]
     : baseHistory;
@@ -232,7 +237,7 @@ export const chatWithJsonTools = async (history, newMessage, jsonContext, imageP
 
   const msgWithContext = jsonContext
     ? `[YouTube channel JSON loaded: ${jsonContext.videoCount || 0} videos. Fields: ${jsonContext.fields || 'title, view_count, like_count, comment_count, duration, release_date, video_url'}]\n\n${newMessage}`
-    : newMessage;
+    : (imageParts?.length > 0 ? newMessage.slice(0, 500) : newMessage);
 
   // Include image parts so Gemini sees the anchor/reference image when user asks to generate from it
   const messageParts =

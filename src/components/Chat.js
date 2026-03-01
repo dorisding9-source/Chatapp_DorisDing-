@@ -20,22 +20,22 @@ import './Chat.css';
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 // Resize/compress image to reduce token count (Gemini has ~1M token limit)
-const MAX_IMAGE_DIM = 512;
-const JPEG_QUALITY = 0.82;
+const MAX_IMAGE_DIM = 256;
+const JPEG_QUALITY = 0.55;
 
-async function resizeImageForApi(base64, mimeType) {
+async function resizeImageForApi(base64, mimeType, maxDim = MAX_IMAGE_DIM, quality = JPEG_QUALITY) {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => {
       let w = img.width;
       let h = img.height;
-      if (w > MAX_IMAGE_DIM || h > MAX_IMAGE_DIM) {
+      if (w > maxDim || h > maxDim) {
         if (w > h) {
-          h = Math.round((h * MAX_IMAGE_DIM) / w);
-          w = MAX_IMAGE_DIM;
+          h = Math.round((h * maxDim) / w);
+          w = maxDim;
         } else {
-          w = Math.round((w * MAX_IMAGE_DIM) / h);
-          h = MAX_IMAGE_DIM;
+          w = Math.round((w * maxDim) / h);
+          h = maxDim;
         }
       }
       const canvas = document.createElement('canvas');
@@ -44,7 +44,7 @@ async function resizeImageForApi(base64, mimeType) {
       const ctx = canvas.getContext('2d');
       ctx.drawImage(img, 0, 0, w, h);
       try {
-        const dataUrl = canvas.toDataURL('image/jpeg', JPEG_QUALITY);
+        const dataUrl = canvas.toDataURL('image/jpeg', quality);
         resolve({ data: dataUrl.split(',')[1], mimeType: 'image/jpeg' });
       } catch (e) {
         reject(e);
@@ -419,12 +419,15 @@ export default function Chat({ username, user, onLogout }) {
     const hasCsvInSession = !!sessionCsvRows || !!capturedCsv;
     // Base64 is only worth sending when Gemini will actually run Python
     const needsBase64 = !!capturedCsv && wantPythonOnly;
+    // Image generation intent: user asks to create/generate/make/draw an image
+    const IMAGE_GEN_KEYWORDS = /\b(generate|create|make|draw|paint)\b.*\b(image|picture|photo|illustration|art)\b|\b(image|picture|photo|illustration)\b.*\b(of|with)\b/i;
+    const wantImageGen = IMAGE_GEN_KEYWORDS.test(text) || /\b(generate|create|make|draw)\s+(a|an|the)\s+/.test(text);
     // Mode selection:
-    //   useJsonTools    — JSON (YouTube) loaded → YouTube tools (plot, play, stats, generateImage)
+    //   useJsonTools    — JSON (YouTube) loaded OR image generation requested → YouTube tools (plot, play, stats, generateImage)
     //   useTools       — CSV loaded + no Python needed → client-side JS tools (free, fast)
     //   useCodeExecution — Python explicitly needed (regression, histogram, etc.)
     //   else           — Google Search streaming
-    const useJsonTools = !!sessionJsonData?.videos?.length;
+    const useJsonTools = !!sessionJsonData?.videos?.length || (wantImageGen && !sessionCsvRows && !wantPythonOnly && !wantCode && !capturedCsv);
     const useTools = !!sessionCsvRows && !wantPythonOnly && !wantCode && !capturedCsv && !useJsonTools;
     const useCodeExecution = (wantPythonOnly || wantCode) && !useJsonTools;
 
@@ -501,7 +504,12 @@ ${sessionSummary}${slimCsvBlock}
         try {
           return await resizeImageForApi(img.data, img.mimeType || 'image/png');
         } catch {
-          return { mimeType: img.mimeType, data: img.data };
+          // Fallback: try smaller size (192px, 0.5 quality) to avoid token overflow
+          try {
+            return await resizeImageForApi(img.data, img.mimeType || 'image/png', 192, 0.5);
+          } catch {
+            return { mimeType: img.mimeType, data: img.data };
+          }
         }
       })
     );
@@ -526,7 +534,33 @@ ${sessionSummary}${slimCsvBlock}
     let toolCalls = [];
 
     try {
-      if (useJsonTools) {
+      // Root fix for token limit: when user has image + wants to generate image,
+      // bypass chat entirely and call image API directly. No history = no overflow.
+      const directImageGen = imageParts.length > 0 && wantImageGen;
+      if (directImageGen) {
+        const API = process.env.REACT_APP_API_URL || '';
+        const prompt = (text || '').trim() || 'A beautiful image';
+        const res = await fetch(`${API}/api/generate-image`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            prompt,
+            anchorImageBase64: imageParts[0]?.data,
+            anchorImageMimeType: imageParts[0]?.mimeType || 'image/jpeg',
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Image generation failed');
+        fullContent = "Here's your image!";
+        toolCharts = [{ _chartType: 'generated_image', imageBase64: data.imageBase64, prompt: data.prompt }];
+        setMessages((m) =>
+          m.map((msg) =>
+            msg.id === assistantId
+              ? { ...msg, content: fullContent, charts: toolCharts }
+              : msg
+          )
+        );
+      } else if (useJsonTools) {
         const { text: answer, charts: returnedCharts, toolCalls: returnedCalls } = await chatWithJsonTools(
           history,
           promptForGemini,
