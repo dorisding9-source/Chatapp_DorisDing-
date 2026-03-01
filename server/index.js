@@ -303,8 +303,10 @@ app.post('/api/youtube/channel', async (req, res) => {
 // ── Image generation ─────────────────────────────────────────────────────────
 
 const GEMINI_KEY = process.env.REACT_APP_GEMINI_API_KEY;
+console.log('Gemini key present:', !!GEMINI_KEY);
 
 app.post('/api/generate-image', async (req, res) => {
+  console.log('[Image] POST /api/generate-image received');
   if (!GEMINI_KEY) {
     return res.status(400).json({ error: 'Gemini API key required for image generation' });
   }
