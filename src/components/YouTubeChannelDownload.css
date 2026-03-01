@@ -1,0 +1,187 @@
+.youtube-download-page {
+  height: 100%;
+  overflow-y: auto;
+  background: linear-gradient(135deg, #0f0f23 0%, #1a1a2e 50%, #16213e 100%);
+  color: #e2e8f0;
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+.youtube-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 2rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.youtube-header h1 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.youtube-user-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.youtube-logout {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #e2e8f0;
+  padding: 0.4rem 0.8rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.875rem;
+}
+
+.youtube-logout:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.youtube-content {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 2rem;
+}
+
+.youtube-form input[type="url"] {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  color: #e2e8f0;
+  font-size: 1rem;
+  margin-bottom: 1rem;
+}
+
+.youtube-form input[type="url"]::placeholder {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.youtube-form-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.youtube-form-row label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.youtube-form-row input[type="number"] {
+  width: 4rem;
+  padding: 0.4rem;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  color: #e2e8f0;
+}
+
+.youtube-download-btn {
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  border: none;
+  color: white;
+  padding: 0.6rem 1.2rem;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.youtube-download-btn:hover:not(:disabled) {
+  opacity: 0.95;
+}
+
+.youtube-download-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.youtube-progress-wrap {
+  margin-top: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.youtube-progress-message {
+  margin: 0;
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.youtube-progress-wrap .youtube-progress-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.youtube-progress-wrap .youtube-progress-bar {
+  flex: 1;
+}
+
+.youtube-progress-bar {
+  flex: 1;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.youtube-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #6366f1, #8b5cf6);
+  transition: width 0.2s;
+}
+
+.youtube-error {
+  color: #f87171;
+  margin-top: 1rem;
+}
+
+.youtube-result {
+  margin-top: 2rem;
+  padding: 1.5rem;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.youtube-result h3 {
+  margin: 0 0 1rem;
+  font-size: 1.1rem;
+}
+
+.youtube-save-btn {
+  background: #22c55e;
+  border: none;
+  color: white;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  font-weight: 500;
+  cursor: pointer;
+  margin-bottom: 1rem;
+}
+
+.youtube-save-btn:hover {
+  background: #16a34a;
+}
+
+.youtube-video-list {
+  font-size: 0.9rem;
+}
+
+.youtube-video-item {
+  padding: 0.4rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.youtube-more {
+  margin: 0.5rem 0 0;
+  color: rgba(255, 255, 255, 0.5);
+}

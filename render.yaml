@@ -1,5 +1,8 @@
 # Render Blueprint — defines both services in one file.
 # Docs: https://render.com/docs/blueprint-spec
+#
+# After creating: set all env vars in the Render dashboard for each service.
+# REACT_APP_API_URL on frontend = your backend URL (e.g. https://chatapp-backend.onrender.com)
 
 services:
 
@@ -12,19 +15,23 @@ services:
     startCommand: node server/index.js
     envVars:
       - key: MONGODB_URI
-        sync: false   # set manually in the Render dashboard
+        sync: false   # MongoDB Atlas connection string
+      - key: REACT_APP_GEMINI_API_KEY
+        sync: false   # Gemini API key (chat)
+      - key: REACT_APP_YOUTUBE_API_KEY
+        sync: false   # YouTube Data API v3 key (YouTube tab)
 
   # ── Frontend: React static site ────────────────────────────────────────────
   - type: static
     name: chatapp-frontend
     plan: free
-    buildCommand: npm install && ./node_modules/.bin/react-scripts build
+    buildCommand: npm install && npm run build
     staticPublishPath: ./build
     envVars:
       - key: REACT_APP_GEMINI_API_KEY
-        sync: false   # set manually — baked into JS bundle at build time
+        sync: false   # baked into JS at build time
       - key: REACT_APP_API_URL
-        sync: false   # set to the backend URL, e.g. https://chatapp-backend.onrender.com
+        sync: false   # backend URL, e.g. https://chatapp-backend.onrender.com
     routes:
       - type: rewrite
         source: /*

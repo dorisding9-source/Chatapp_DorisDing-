@@ -1,9 +1,10 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { CSV_TOOL_DECLARATIONS } from './csvTools';
+import { YOUTUBE_TOOL_DECLARATIONS } from './youtubeTools';
 
 const genAI = new GoogleGenerativeAI(process.env.REACT_APP_GEMINI_API_KEY || '');
 
-const MODEL = 'gemini-2.0-flash';
+const MODEL = 'gemini-2.5-flash';
 
 const SEARCH_TOOL = { googleSearch: {} };
 const CODE_EXEC_TOOL = { codeExecution: {} };
@@ -12,15 +13,21 @@ export const CODE_KEYWORDS = /\b(plot|chart|graph|analyz|statistic|regression|co
 
 let cachedPrompt = null;
 
-async function loadSystemPrompt() {
-  if (cachedPrompt) return cachedPrompt;
-  try {
-    const res = await fetch('/prompt_chat.txt');
-    cachedPrompt = res.ok ? (await res.text()).trim() : '';
-  } catch {
-    cachedPrompt = '';
+async function loadSystemPrompt(userContext = null) {
+  let base = cachedPrompt;
+  if (!base) {
+    try {
+      const res = await fetch('/prompt_chat.txt');
+      base = res.ok ? (await res.text()).trim() : '';
+      cachedPrompt = base;
+    } catch {
+      base = '';
+    }
   }
-  return cachedPrompt;
+  if (userContext?.firstName) {
+    base += `\n\n[User context: The user's name is ${userContext.firstName}${userContext.lastName ? ' ' + userContext.lastName : ''}. Address them by their first name in your first message to make it personal.]`;
+  }
+  return base;
 }
 
 // Yields:
@@ -33,8 +40,8 @@ async function loadSystemPrompt() {
 // useCodeExecution: pass true to use codeExecution tool (CSV/analysis),
 //                   false (default) to use googleSearch tool.
 // Note: Gemini does not support both tools simultaneously.
-export const streamChat = async function* (history, newMessage, imageParts = [], useCodeExecution = false) {
-  const systemInstruction = await loadSystemPrompt();
+export const streamChat = async function* (history, newMessage, imageParts = [], useCodeExecution = false, userContext = null) {
+  const systemInstruction = await loadSystemPrompt(userContext);
   const tools = useCodeExecution ? [CODE_EXEC_TOOL] : [SEARCH_TOOL];
   const model = genAI.getGenerativeModel({
     model: MODEL,
@@ -128,8 +135,8 @@ export const streamChat = async function* (history, newMessage, imageParts = [],
 // executeFn(toolName, args) → plain JS object with the result
 // Returns the final text response from the model.
 
-export const chatWithCsvTools = async (history, newMessage, csvHeaders, executeFn) => {
-  const systemInstruction = await loadSystemPrompt();
+export const chatWithCsvTools = async (history, newMessage, csvHeaders, executeFn, userContext = null) => {
+  const systemInstruction = await loadSystemPrompt(userContext);
   const model = genAI.getGenerativeModel({
     model: MODEL,
     tools: [{ functionDeclarations: CSV_TOOL_DECLARATIONS }],
@@ -179,6 +186,65 @@ export const chatWithCsvTools = async (history, newMessage, csvHeaders, executeF
     toolCalls.push({ name, args, result: toolResult });
 
     // Capture chart payloads so the UI can render them
+    if (toolResult?._chartType) {
+      charts.push(toolResult);
+    }
+
+    response = (
+      await chat.sendMessage([
+        { functionResponse: { name, response: { result: toolResult } } },
+      ])
+    ).response;
+  }
+
+  return { text: response.text(), charts, toolCalls };
+};
+
+// ── Function-calling chat for YouTube/JSON tools ──────────────────────────────
+
+export const chatWithJsonTools = async (history, newMessage, jsonContext, executeFn, userContext = null) => {
+  const systemInstruction = await loadSystemPrompt(userContext);
+  const model = genAI.getGenerativeModel({
+    model: MODEL,
+    tools: [{ functionDeclarations: YOUTUBE_TOOL_DECLARATIONS }],
+  });
+
+  const baseHistory = history.map((m) => ({
+    role: m.role === 'user' ? 'user' : 'model',
+    parts: [{ text: m.content || '' }],
+  }));
+
+  const chatHistory = systemInstruction
+    ? [
+        {
+          role: 'user',
+          parts: [{ text: `Follow these instructions in every response:\n\n${systemInstruction}` }],
+        },
+        { role: 'model', parts: [{ text: "Got it! I'll follow those instructions." }] },
+        ...baseHistory,
+      ]
+    : baseHistory;
+
+  const chat = model.startChat({ history: chatHistory });
+
+  const msgWithContext = jsonContext
+    ? `[YouTube channel JSON loaded: ${jsonContext.videoCount || 0} videos. Fields: ${jsonContext.fields || 'title, view_count, like_count, comment_count, duration, release_date, video_url'}]\n\n${newMessage}`
+    : newMessage;
+
+  let response = (await chat.sendMessage(msgWithContext)).response;
+
+  const charts = [];
+  const toolCalls = [];
+
+  for (let round = 0; round < 5; round++) {
+    const parts = response.candidates?.[0]?.content?.parts || [];
+    const funcCall = parts.find((p) => p.functionCall);
+    if (!funcCall) break;
+
+    const { name, args } = funcCall.functionCall;
+    const toolResult = await Promise.resolve(executeFn(name, args));
+    toolCalls.push({ name, args, result: toolResult });
+
     if (toolResult?._chartType) {
       charts.push(toolResult);
     }

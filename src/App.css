@@ -5,3 +5,45 @@
 .App {
   min-height: 100vh;
 }
+
+.app-with-tabs {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.app-tabs {
+  flex-shrink: 0;
+  display: flex;
+  gap: 0;
+  padding: 0 1rem;
+  background: rgba(0, 0, 0, 0.3);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.app-with-tabs .chat-layout,
+.app-with-tabs .youtube-download-page {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.app-tabs button {
+  padding: 0.75rem 1.25rem;
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.95rem;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+}
+
+.app-tabs button:hover {
+  color: #fff;
+}
+
+.app-tabs button.active {
+  color: #fff;
+  border-bottom-color: #818cf8;
+}
